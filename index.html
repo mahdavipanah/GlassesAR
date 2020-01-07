@@ -107,8 +107,17 @@
 
                 const eyesDist = calculateDist(centerLeft, centerRight);
 
-                const glassesSize = eyesDist * 2.1;
-                overlayContext.drawImage(sunglasses, centerLeft.x - eyesDist * 0.85, centerLeft.y - eyesDist * 1, glassesSize * 1.3, glassesSize);
+                const glassesSize = eyesDist * 2.6;
+
+                overlayContext.save()
+                overlayContext.translate(centerLeft.x - eyesDist * 0.8, centerLeft.y - eyesDist * 1.2)
+                overlayContext.translate(glassesSize / 2, glassesSize / 2);
+
+                overlayContext.rotate((centerLeft.y - centerRight.y) / (centerLeft.x - centerRight.x));
+
+                overlayContext.drawImage(sunglasses, -(glassesSize)/2, -glassesSize/2, glassesSize, glassesSize);
+
+                overlayContext.restore();
 
                 lastCenterLeft = centerLeft;
                 lastCenterRight = centerRight;
