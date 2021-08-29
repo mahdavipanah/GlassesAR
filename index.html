@@ -1,144 +1,165 @@
-<!doctype html>
+<!DOCTYPE html>
 
 <html lang="en">
-<head>
-  <meta charset="utf-8">
+  <head>
+    <meta charset="utf-8" />
 
-  <title>Glasses AR</title>
-  <meta name="description" content="Test Glasses with AR">
-  <meta name="author" content="Hamidreza Mahdavipanah">
+    <title>Glasses AR</title>
+    <meta name="description" content="Test Glasses with AR" />
+    <meta name="author" content="Hamidreza Mahdavipanah" />
 
-  <script src="public/js/face-api.min.js"></script>
+    <script src="public/js/face-api.min.js"></script>
 
-  <style>
-        #container {
-            margin: 0px auto;
-            width: 500px;
-            height: 375px;
-            border: 10px #333 solid;
-        }
-        #videoElement {
-            position: absolute;
-            width: 500px;
-            height: 375px;
-            background-color: #666;
-        }
-        #overlay {
-            position: absolute;
-            width: 500px;
-            height: 375px;
-            z-index: 10;
-        }
-        #captureCanvas {
-            width: 500px;
-            height: 375px;
-            display: none;
-        }
-  </style>
-</head>
+    <style>
+      #container {
+        margin: 0px auto;
+        width: 500px;
+        height: 375px;
+        border: 10px #333 solid;
+      }
+      #videoElement {
+        position: absolute;
+        width: 500px;
+        height: 375px;
+        background-color: #666;
+      }
+      #overlay {
+        position: absolute;
+        width: 500px;
+        height: 375px;
+        z-index: 10;
+      }
+      #captureCanvas {
+        width: 500px;
+        height: 375px;
+        display: none;
+      }
+    </style>
+  </head>
 
-<body>
+  <body>
     <div id="container">
-        <video autoplay="true" id="videoElement">
-
-        </video>
-        <canvas id="overlay">
-
-        </canvas>
-        <canvas id="captureCanvas"></canvas>
+      <video autoplay="true" id="videoElement"></video>
+      <canvas id="overlay"> </canvas>
+      <canvas id="captureCanvas"></canvas>
     </div>
-    <img id="sunglasses" style="display:none" src="public/sunglasses.png"/>
+    <img id="sunglasses" style="display: none" src="public/sunglasses-2.png" />
 
     <script>
-        document.addEventListener("DOMContentLoaded", async () => {
-            const video = document.querySelector("#videoElement");
+      document.addEventListener("DOMContentLoaded", async () => {
+        const video = document.querySelector("#videoElement");
 
-            if (navigator.mediaDevices.getUserMedia) {
-                navigator.mediaDevices.getUserMedia({video: true})
-                    .then((stream) => {
-                        video.srcObject = stream;
-                    })
-                    .catch((err) => {
-                        console.error("Something went wrong!");
-                        console.error(err);
-                    })
+        if (navigator.mediaDevices.getUserMedia) {
+          navigator.mediaDevices
+            .getUserMedia({ video: true })
+            .then((stream) => {
+              video.srcObject = stream;
+            })
+            .catch((err) => {
+              console.error("Something went wrong!");
+              console.error(err);
+            });
+        }
+
+        await Promise.all([
+          faceapi.nets.ssdMobilenetv1.loadFromUri("./public/weights"),
+          faceapi.nets.faceLandmark68Net.loadFromUri("./public/weights"),
+        ]);
+
+        const overlay = document.querySelector("#overlay");
+        const overlayContext = overlay.getContext("2d");
+        const sunglasses = document.querySelector("#sunglasses");
+
+        let lastCenterLeft = null,
+          lastCenterRight = null;
+        const drawEyesCircles = function (leftEye, rightEye) {
+          const calculateCenter = (eye) => ({
+            x: eye.reduce((a, b) => a + b._x, 0) / eye.length,
+            y: eye.reduce((a, b) => a + b._y, 0) / eye.length,
+          });
+          const centerLeft = calculateCenter(leftEye),
+            centerRight = calculateCenter(rightEye);
+
+          const calculateDist = (pointA, pointB) =>
+            Math.sqrt(
+              Math.pow(pointA.x - pointB.x, 2) +
+                Math.pow(pointA.y - pointB.y, 2)
+            );
+
+          if (lastCenterLeft !== null) {
+            if (calculateDist(lastCenterLeft, centerLeft) < 2) {
+              return;
             }
+          }
 
-            await Promise.all([
-                faceapi.nets.ssdMobilenetv1.loadFromUri('./public/weights'),
-                faceapi.nets.faceLandmark68Net.loadFromUri('./public/weights'),
-            ]);
-            
-            const overlay = document.querySelector("#overlay");
-            const overlayContext = overlay.getContext('2d');
-            const sunglasses = document.querySelector("#sunglasses");
+          overlayContext.clearRect(0, 0, overlay.width, overlay.height);
 
-            let lastCenterLeft = null, lastCenterRight = null;
-            const drawEyesCircles = function (leftEye, rightEye) {
-                /*
-                // draw eyes points
-                for (const point of leftEye.concat(rightEye)) {
-                    overlayContext.beginPath();
-                    overlayContext.arc(point._x, point._y, 1, 0, 2 * Math.PI, false);
-                    overlayContext.fillStyle = 'green';
-                    overlayContext.fill();
-                }
-                */
+          const eyesDist = calculateDist(centerLeft, centerRight);
 
-                const calculateCenter = (leftEye) => ({
-                    x: leftEye.reduce((a, b) => a + b._x, 0) / leftEye.length,
-                    y: leftEye.reduce((a, b) => a + b._y, 0) / leftEye.length
-                });
-                const centerLeft = calculateCenter(leftEye),
-                    centerRight = calculateCenter(rightEye);
+          const resizeFactor = {
+            base: 0.029,
+            change: 0.04,
+            x: 0,
+            y: 5,
+          };
 
-                const calculateDist = (pointA, pointB) => Math.sqrt(
-                    Math.pow(pointA.x - pointB.x, 2) +
-                    Math.pow(pointA.y - pointB.y, 2)
-                );
-
-                if (lastCenterLeft !== null) {
-                    if (calculateDist(lastCenterLeft, centerLeft) < 1) {
-                        return;
-                    }
-                }
-
-                overlayContext.clearRect(0, 0, overlay.width, overlay.height);
-
-                const eyesDist = calculateDist(centerLeft, centerRight);
-
-                const glassesSize = eyesDist * 2.6;
-
-                overlayContext.save()
-                overlayContext.translate(centerLeft.x - eyesDist * 0.8, centerLeft.y - eyesDist * 1.2)
-                overlayContext.translate(glassesSize / 2, glassesSize / 2);
-
-                overlayContext.rotate((centerLeft.y - centerRight.y) / (centerLeft.x - centerRight.x));
-
-                overlayContext.drawImage(sunglasses, -(glassesSize)/2, -glassesSize/2, glassesSize, glassesSize);
-
-                overlayContext.restore();
-
-                lastCenterLeft = centerLeft;
-                lastCenterRight = centerRight;
+          overlayContext.save();
+          const glassesSize = (() => {
+            const width =
+              sunglasses.width *
+              resizeFactor.base *
+              (eyesDist * resizeFactor.change);
+            return {
+              width,
+              height: width * (sunglasses.height / sunglasses.width),
             };
+          })();
 
-            const canvas = document.querySelector("#captureCanvas");
-            const img = new Image();
-            setInterval(async () => {
-                const context = canvas.getContext('2d');
-                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+          translateCoord = {
+            x: centerRight.x + eyesDist / 2,
+            y: centerRight.y + resizeFactor.y * eyesDist * resizeFactor.change,
+          };
+          overlayContext.translate(translateCoord.x, translateCoord.y);
 
-                const data = canvas.toDataURL('image/png');
-                
-                img.setAttribute('src', data);
-                
-                const detectionResults = await faceapi.detectSingleFace(img).withFaceLandmarks();
-                if (detectionResults) {
-                    drawEyesCircles(detectionResults.landmarks.getLeftEye(), detectionResults.landmarks.getRightEye());
-                }
-            }, 50)
-        });    
+          overlayContext.rotate(
+            (centerLeft.y - centerRight.y) / (centerLeft.x - centerRight.x)
+          );
+
+          overlayContext.drawImage(
+            sunglasses,
+            -(glassesSize.width / 2) - eyesDist,
+            -(glassesSize.height / 2),
+            glassesSize.width,
+            glassesSize.height
+          );
+
+          overlayContext.restore();
+
+          lastCenterLeft = centerLeft;
+          lastCenterRight = centerRight;
+        };
+
+        const canvas = document.querySelector("#captureCanvas");
+        const img = new Image();
+        setInterval(async () => {
+          const context = canvas.getContext("2d");
+          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+          const data = canvas.toDataURL("image/png");
+
+          img.setAttribute("src", data);
+
+          const detectionResults = await faceapi
+            .detectSingleFace(img)
+            .withFaceLandmarks();
+          if (detectionResults) {
+            drawEyesCircles(
+              detectionResults.landmarks.getLeftEye(),
+              detectionResults.landmarks.getRightEye()
+            );
+          }
+        }, 50);
+      });
     </script>
-</body>
+  </body>
 </html>
